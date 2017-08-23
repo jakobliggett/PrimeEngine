@@ -20,6 +20,7 @@ def sieve(n):
     return lst
 
 '''
+### This currently takes 31.41s
 times = time.time()
 sieve(123456789)
 print('Done, took {}s'.format(time.time()-times))
