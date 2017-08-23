@@ -2,11 +2,13 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import SieveEratosthenes
 import os
 
+import SieveEratosthenes
+import LucasLehmer
+
 version = 0.01
-methods = ['Standard Sieve of Eratosthenes', 'Settings', 'Help', 'Quit']
+methods = ['Standard Sieve of Eratosthenes', 'Lucas Lehmer Test', 'Settings', 'Help', 'Quit']
 store_mode = 'print' #or write to file
 
 print('Welcome to PrimeEngine v{}\n'.format(version))
@@ -72,6 +74,10 @@ def main():
         print('The sieve of eratosthenes finds prime numbers')
         limit = InputLoop('Find all primes under: ', 'int')
         primes = SieveEratosthenes.sieve(limit)
+        HandlePrimes(primes)
+    elif (methods[intchoice]).lower() == 'lucas lehmer test':
+        limit = InputLoop('Find all mersenne primes under: M', 'int')
+        primes = LucasLehmer.mersennes_under(limit)
         HandlePrimes(primes)
     elif (methods[intchoice]).lower() == 'settings':
         selection = InputLoop('(P)rint primes or store in (F)ile: ', 'alpha', valid_answers=['p', 'f'])
