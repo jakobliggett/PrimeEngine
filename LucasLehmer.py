@@ -18,3 +18,10 @@ def mersenne_test(n):
 def mersennes_under(n):
     m_primes = [x for x in range(n) if mersenne_test(x)]
     return m_primes
+
+def continuous_mersenne(writefile):
+    i = 1
+    while True:
+        if mersenne_test(i):
+            with open(writefile, 'a') as f:
+                f.write('M{} \n'.format(i))

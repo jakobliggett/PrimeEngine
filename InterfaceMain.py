@@ -7,7 +7,7 @@ import os
 import SieveEratosthenes
 import LucasLehmer
 
-version = 0.01
+version = 0.03
 methods = ['Standard Sieve of Eratosthenes', 'Lucas Lehmer Test', 'Settings', 'Help', 'Quit']
 store_mode = 'print' #or write to file
 
@@ -40,7 +40,7 @@ def InputLoop(strng, cast_type, invalid_text='invalid argument', valid_answers =
 def HandlePrimes(primes):
     filename = 'primes'
     if store_mode == 'print':
-        print(primes)
+        print(primes, '\n')
     elif store_mode == 'file':
         valid = False
         i = 0
