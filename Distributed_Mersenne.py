@@ -4,17 +4,27 @@ import math
 import logging
 import LucasLehmer
 import os
+import time
 
+'''
 valid = False
 i = 0
 while not valid:
-    if not os.path.isfile('distributed_mersenne_master'+str(i)+'.txt'):
+    if not os.path.isfile('distributed_mersenne_corrects'+str(i)+'.txt'):
         valid = True
     else:
         i += 1
+'''
+
+i = 0
 filename = 'distributed_mersenne_master'+str(i)+'.txt'
+corrects_only_filename = 'distributed_mersenne_corrects'+str(i)+'.txt'
 
 append_lock = thread.allocate_lock()
+
+current_jobs = {}
+current_jobs_lock = thread.allocate_lock()
+janitor_delay = 10 #3 minutes until the janitor is called in
 
 def InputLoop(strng, cast_type, invalid_text='invalid argument', valid_answers = None):
     done = None
@@ -61,40 +71,101 @@ def threaded_client_worker(conn):
             '''
 
 def threaded_client_server(conn):
+    can_work = True
+    wait_time = time.time()+0.5 #time to wait for special identifiers
     ##What the server sends to the worker
     print('threaded_client_server started')
-    working = False
-    while True:
+
+    def call_janitor():
+        logging.info('A janitor has connected')
+        while True:
+            try:
+                if working == True:
+                    en_data = conn.recv(2048)
+                    data = en_data.decode('utf-8')
+                    checked, result = data.split(',')
+                    checked = int(checked)
+                    with current_jobs_lock:
+                        del current_jobs[checked] ##cleans current working jobs dict
+                    if result == 'True':
+                        result = True
+                    elif result == 'False':
+                        result = False
+                    with master_results_lock:
+                        master_results.append([checked, result])
+                    with append_lock:
+                        with open(filename, 'a') as f:
+                            f.write(str([checked, result]))
+                        if result == True:
+                            with open(corrects_only_filename, 'a') as f:
+                                f.write(str([checked, result]))
+                    working = False
+
+                elif working == False:
+                    for num in current_jobs:
+                        if num > time.time():
+                            job = num
+                    conn.sendall(job)
+                    working = True
+                    logging.warning('Gave janitor job for checking {}'.format(job))
+
+            except Exception as e:
+                #print(str(e))
+                pass
+
+    while time.time() < wait_time:
         try:
-            if working == True:
-                en_data = conn.recv(2048)
-                data = en_data.decode('utf-8')
-                #print(data)
-                checked, result = data.split(',')
-                checked = int(checked)
-                if result == 'True':
-                    result = True
-                elif result == 'False':
-                    result = False
-                with master_results_lock:
-                    master_results.append([checked, result])
-                with append_lock:
-                    with open(filename, 'a') as f:
-                        f.write(str([checked, result]))
-                working = False
-
-            elif working == False:
-
-                with queue_grab_lock:
-                    job = str(len(server_check_queue)+1)
-                    server_check_queue.append(job)
-                conn.sendall(job)
-                working = True
-                logging.info('Gave worker job for checking {}'.format(job))
-
-        except Exception as e:
-            #print(str(e))
+            en_data = conn.recv(2048)
+            data = en_data.decode('utf-8')
+            #print(str(data), str(data) == '!!Janitor')
+            if data == u'!!Janitor':
+                #print('JANJANJAN')
+                call_janitor()
+                can_work = False
+        except:
             pass
+    logging.debug('Wait loop passed, not a special case')
+    working = False
+    if can_work:
+        while True:
+            try:
+                if working == True:
+                    en_data = conn.recv(2048)
+                    data = en_data.decode('utf-8')
+                    checked, result = data.split(',')
+                    checked = int(checked)
+                    with current_jobs_lock:
+                        #print(current_jobs)
+                        if str(checked) in current_jobs:
+                            del current_jobs[str(checked)] ##cleans current working jobs dict
+                    if result == 'True':
+                        result = True
+                    elif result == 'False':
+                        result = False
+                    with master_results_lock:
+                        master_results.append([checked, result])
+                    with append_lock:
+                        with open(filename, 'a') as f:
+                            f.write(str([checked, result]))
+                        if result == True:
+                            with open(corrects_only_filename, 'a') as f:
+                                f.write(str([checked, result]))
+                    working = False
+
+                elif working == False:
+
+                    with queue_grab_lock:
+                        job = str(len(server_check_queue)+1)
+                        server_check_queue.append(job)
+                    with current_jobs_lock:
+                        current_jobs[job] = time.time()+janitor_delay ##add's dict key to current jobs
+                    conn.sendall(job)
+                    working = True
+                    logging.info('Gave worker job for checking {}'.format(job))
+
+            except Exception as e:
+                #print(str(e))
+                pass
 
 def threaded_admin_control():
     pass
@@ -114,6 +185,9 @@ master_results_lock = thread.allocate_lock()
 
 def continue_distributed(mode, ip = None, port = None, host_port = 8888):
     if mode == 'master':
+        start_from = InputLoop('Start from M', 'int')
+        for x in range(start_from):
+            server_check_queue.append(x)
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server.setblocking(0)
 
@@ -162,6 +236,28 @@ def continue_distributed(mode, ip = None, port = None, host_port = 8888):
                 to_send = str.encode('{},{}'.format(to_check, result))
                 client.sendall(to_send)
 
+    elif mode == 'janitor':
+        ##run janitor every 10s?
+        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        connected = False
+        while not connected:
+            host = (raw_input('Enter Host IP: '))
+            port = int(raw_input('Enter Host Port: '))
+            try:
+                client.connect((host, port))
+                connected = True
+                logging.info('Connected Successfully')
+            except socket.error:
+                print('Could not connect, try again \n')
+        client.sendall(str.encode('!!Janitor'))
+        while True:
+            if len(current_working_queue) > 0:
+                #print(current_working_queue)
+                to_check = int(current_working_queue.pop(0))
+                result = LucasLehmer.mersenne_test(to_check)
+                logging.info('Janitor LLT returned {} for {}'.format(result, to_check))
+                to_send = str.encode('{},{}'.format(to_check, result))
+                client.sendall(to_send)
 
 
 
